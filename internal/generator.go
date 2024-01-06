@@ -76,6 +76,7 @@ func generate(wg *sync.WaitGroup, p *ckafka.Producer) []byte {
 	return j
 }
 
+// Writes a byte encoded json message to the Kakfa topic
 func writeToKafka(json_obj []byte, p *ckafka.Producer) error {
 	topic := "events"
 	err := p.Produce(&ckafka.Message{

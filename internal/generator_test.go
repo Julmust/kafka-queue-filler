@@ -16,7 +16,7 @@ import (
 var kafkaContainer *gnomock.Container
 
 func TestMain(m *testing.M) {
-	// Set up mock Kafka container
+	// Set up ephemeral mock Kafka container
 	container, err := gnomock.Start(
 		kafka.Preset(kafka.WithTopics("events")),
 		gnomock.WithDebugMode(),
@@ -28,10 +28,11 @@ func TestMain(m *testing.M) {
 	}
 	kafkaContainer = container
 
+	// Run tests
 	eV := m.Run()
 
+	// Tear down Kafka container and exit
 	_ = gnomock.Stop(container)
-
 	os.Exit(eV)
 }
 
@@ -76,13 +77,14 @@ func TestGeneration(t *testing.T) {
 }
 
 func TestWriteToKafka(t *testing.T) {
+	// Create mock message
 	msg := Message{"testArtist", "testSong"}
 	json_byte_msg, err := json.Marshal(msg)
 	if err != nil {
 		log.Println(err)
 	}
 
-	topic := "events"
+	// Create producer and define topic to send message to
 	p, err := ckafka.NewProducer(
 		&ckafka.ConfigMap{
 			"bootstrap.servers": kafkaContainer.Address(kafka.BrokerPort),
@@ -93,13 +95,7 @@ func TestWriteToKafka(t *testing.T) {
 	}
 	defer p.Close()
 
-	p.Produce(&ckafka.Message{
-		TopicPartition: ckafka.TopicPartition{Topic: &topic},
-		Value:          json_byte_msg,
-	}, nil)
-
-	p.Flush(5 * 1000)
-
+	// Test writing to topic
 	err = writeToKafka(json_byte_msg, p)
 	if err != nil {
 		t.Error(err)
