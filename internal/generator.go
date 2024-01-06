@@ -4,7 +4,6 @@ package generator
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"math/rand"
@@ -36,19 +35,25 @@ func Run(no_runs int) int {
 		},
 	)
 	if err != nil {
-		fmt.Fprint(os.Stderr, "Error: logging enabled but no logpath set\n")
+		fmt.Fprint(os.Stderr, "Error: Could not create kafka producer\n")
 		os.Exit(1)
 	}
 	defer p.Close()
 
 	// Populate Kafka queue
 	start := time.Now()
-	for i := 0; i < no_runs; i++ {
+	gen_vals := make(chan []byte, no_runs)
+	for i := 0; i < no_runs/2; i++ {
+		writeToKafka(p, gen_vals)
+	}
+
+	for j := 0; j < no_runs; j++ {
 		wg.Add(1)
 
 		started += 1
-		go generate(&wg, p)
+		go generate(&wg, gen_vals)
 	}
+
 	wg.Wait()
 	end := time.Now()
 	log.Printf("Done. Sent %d messages in %v. Exiting", no_runs, end.Sub(start))
@@ -58,7 +63,7 @@ func Run(no_runs int) int {
 
 // Generates a message containing song information and
 // passes it to the function responsible to write to Kafka
-func generate(wg *sync.WaitGroup, p *ckafka.Producer) []byte {
+func generate(wg *sync.WaitGroup, gen_vals chan []byte) {
 	defer wg.Done()
 	m := Message{artists[rand.Intn(len(artists))], songs[rand.Intn(len(songs))]}
 
@@ -69,23 +74,19 @@ func generate(wg *sync.WaitGroup, p *ckafka.Producer) []byte {
 
 	log.Printf("Generated messsage: %v\n", string(j))
 
-	if err := writeToKafka(j, p); err != nil {
-		log.Print(err)
-	}
-
-	return j
+	gen_vals <- j
 }
 
 // Writes a byte encoded json message to the Kakfa topic
-func writeToKafka(json_obj []byte, p *ckafka.Producer) error {
+func writeToKafka(p *ckafka.Producer, gen_vals chan []byte) {
 	topic := "events"
-	err := p.Produce(&ckafka.Message{
-		TopicPartition: ckafka.TopicPartition{Topic: &topic},
-		Value:          json_obj,
-	}, nil)
-	if err != nil {
-		return errors.New("writeToKafka: Failed to push message to Kafka.")
+	for val := range gen_vals {
+		err := p.Produce(&ckafka.Message{
+			TopicPartition: ckafka.TopicPartition{Topic: &topic},
+			Value:          val,
+		}, nil)
+		if err != nil {
+			log.Println("writeToKafka: Failed to push message to Kafka.")
+		}
 	}
-
-	return nil
 }

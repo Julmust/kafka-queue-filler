@@ -13,29 +13,6 @@ import (
 	"github.com/orlangure/gnomock/preset/kafka"
 )
 
-var kafkaContainer *gnomock.Container
-
-func TestMain(m *testing.M) {
-	// Set up ephemeral mock Kafka container
-	container, err := gnomock.Start(
-		kafka.Preset(kafka.WithTopics("events")),
-		gnomock.WithDebugMode(),
-		gnomock.WithLogWriter(os.Stdout),
-		gnomock.WithContainerName("kafka"),
-	)
-	if err != nil {
-		panic(err)
-	}
-	kafkaContainer = container
-
-	// Run tests
-	eV := m.Run()
-
-	// Tear down Kafka container and exit
-	_ = gnomock.Stop(container)
-	os.Exit(eV)
-}
-
 func TestRun(t *testing.T) {
 	res := Run(10)
 
@@ -47,20 +24,17 @@ func TestRun(t *testing.T) {
 func TestGeneration(t *testing.T) {
 	var wg sync.WaitGroup
 
+	// Channel size required to prevent locking of the channel for the test
+	gen_vals := make(chan []byte, 1)
+
 	wg.Add(1)
 
-	p, err := ckafka.NewProducer(
-		&ckafka.ConfigMap{
-			"bootstrap.servers": kafkaContainer.Address(kafka.BrokerPort),
-		},
-	)
-	if err != nil {
-		panic(err)
-	}
-	defer p.Close()
+	generate(&wg, gen_vals)
+	wg.Wait()
 
-	res := generate(&wg, p)
 	var msg Message
+	res := <-gen_vals
+	close(gen_vals)
 
 	if err := json.Unmarshal(res, &msg); err != nil {
 		panic(err)
@@ -84,10 +58,21 @@ func TestWriteToKafka(t *testing.T) {
 		log.Println(err)
 	}
 
+	// Create mock Kafka instance
+	container, err := gnomock.Start(
+		kafka.Preset(kafka.WithTopics("events")),
+		gnomock.WithDebugMode(),
+		gnomock.WithLogWriter(os.Stdout),
+		gnomock.WithContainerName("kafka"),
+	)
+	if err != nil {
+		panic(err)
+	}
+
 	// Create producer and define topic to send message to
 	p, err := ckafka.NewProducer(
 		&ckafka.ConfigMap{
-			"bootstrap.servers": kafkaContainer.Address(kafka.BrokerPort),
+			"bootstrap.servers": container.Address(kafka.BrokerPort),
 		},
 	)
 	if err != nil {
@@ -95,9 +80,11 @@ func TestWriteToKafka(t *testing.T) {
 	}
 	defer p.Close()
 
+	// Create channel with size 1 to prevent channel from locking
+	gen_vals := make(chan []byte, 1)
+	gen_vals <- json_byte_msg
+	close(gen_vals)
+
 	// Test writing to topic
-	err = writeToKafka(json_byte_msg, p)
-	if err != nil {
-		t.Error(err)
-	}
+	writeToKafka(p, gen_vals)
 }
