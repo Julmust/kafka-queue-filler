@@ -31,7 +31,7 @@ func Run(no_runs int) int {
 		wg.Add(1)
 
 		started += 1
-		go Generate(&wg)
+		go generate(&wg)
 	}
 	wg.Wait()
 	end := time.Now()
@@ -42,7 +42,7 @@ func Run(no_runs int) int {
 
 // Generates a message containing song information and
 // passes it to the function responsible to write to Kafka
-func Generate(wg *sync.WaitGroup) []byte {
+func generate(wg *sync.WaitGroup) []byte {
 	defer wg.Done()
 	m := Message{artists[rand.Intn(len(artists))], songs[rand.Intn(len(songs))]}
 
