@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	generator "github.com/julmust/kafka-queue-filler/pkg"
+	generator "github.com/julmust/kafka-queue-filler/internal"
 )
 
 func main() {

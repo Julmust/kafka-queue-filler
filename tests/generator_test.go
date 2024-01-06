@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	generator "github.com/julmust/kafka-queue-filler/pkg"
+	generator "github.com/julmust/kafka-queue-filler/internal"
 )
 
 func TestRun(t *testing.T) {
