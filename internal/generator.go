@@ -4,6 +4,7 @@ package generator
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"sync"
@@ -40,7 +41,7 @@ func Run(no_runs int) int {
 }
 
 // Generates a message containing song information and
-// returns a byte represented JSON object
+// passes it to the function responsible to write to Kafka
 func Generate(wg *sync.WaitGroup) []byte {
 	defer wg.Done()
 	m := Message{artists[rand.Intn(len(artists))], songs[rand.Intn(len(songs))]}
@@ -52,5 +53,13 @@ func Generate(wg *sync.WaitGroup) []byte {
 
 	log.Printf("Generated messsage: %v\n", string(j))
 
+	if err := writeToKafka(j); err != nil {
+		log.Print(err)
+	}
+
 	return j
+}
+
+func writeToKafka(json_obj []byte) error {
+	return errors.New("writeToKafka: Failed to push message to Kafka.")
 }
